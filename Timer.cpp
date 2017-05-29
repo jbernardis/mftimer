@@ -73,7 +73,7 @@ boolean Timer::IsRunning() {
 }
 
 boolean Timer::WasStopped() {
-	return (wasStopped);
+	return (false); //(wasStopped);
 }
 
 void Timer::IncrementValue(int incr) {
@@ -90,6 +90,10 @@ long Timer::GetValue() {
 
 boolean Timer::IsTriggered() {
 	return isTriggered;
+}
+
+void Timer::ClearTrigger() {
+  isTriggered = false;
 }
 
 void Timer::sec10Timer() {

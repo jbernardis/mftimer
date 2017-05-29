@@ -6,36 +6,11 @@
 const int numRows = 4;
 const int numCols = 20;
 
-const int CLOCKUP = 0;
-const int CLOCKDN = 1;
-const int LAP1 = 2;
-const int LAP2 = 3;
-const int LAP3 = 4;
-const int LAP4 = 5;
+const int LAP1 = 0;
+const int LAP2 = 1;
+const int LAP3 = 2;
+const int LAP4 = 3;
 
-byte clockUpChar[8] =
-{
-    B00100,
-    B01010,
-    B10001,
-    B01110,
-    B10011,
-    B10101,
-    B10001,
-    B01110
-};
-
-byte clockDnChar[8] =
-{
-    B01110,
-    B10011,
-    B10101,
-    B10001,
-    B01110,
-    B10001,
-    B01010,
-    B00100
-};
 
 byte lap1Char[8] =
 {
@@ -90,21 +65,21 @@ Display::Display(int addr) {
 	plcd = new LiquidTWI2(addr);
 	lcdInit(true);
 	direction = 1;
-	timeDirChar = 0;
+	mode = 0;
 }
 
 void Display::DisplayAlert(boolean onoff) {
 }
 
 void Display::DisplayTime(long tm) {
-	ShowTime(tm, 0, 0, timeDirChar);
+	ShowTime(tm, 0, 0);
 }
 
 void Display::ShowTime(long tm, int row, int col) {
-	ShowTime(tm, row, col, -1);
+  ShowTime(tm, row, col, -1);
 }
 
-void Display::ShowTime(long tm, int row, int col, int specChar) {
+void Display::ShowTime(long tm, int row, int col, int sChar) {
 	long tenths, secs, mins;
 	tenths = tm % 10;
 	tm = tm / 10;
@@ -113,10 +88,10 @@ void Display::ShowTime(long tm, int row, int col, int specChar) {
 	mins = tm / 60;
 
 	plcd -> setCursor(row, col);
-	if (specChar < 0)
-		plcd -> print(" ");
-	else
-		plcd -> write((uint8_t) specChar);
+  if (sChar < 0)
+    plcd -> print(" ");
+  else
+    plcd -> write((uint8_t) sChar);
     	
 	if (mins >= 1000) 
 		mins = mins % 1000;
@@ -140,6 +115,11 @@ void Display::ShowTime(long tm, int row, int col, int specChar) {
 		clearResolutionTime = 0;
 		ClearResolution();
 	}
+
+	if (clearModeTime > 0 && millis() > clearModeTime) {
+		clearModeTime = 0;
+		ClearMode();
+	}
 }
 
 void Display::ShowLaps(long *lt, int n) {
@@ -156,12 +136,28 @@ void Display::ShowLaps(long *lt, int n) {
 	}
 }
 
-void Display::ShowDirection(int dir) {
-	direction = dir;
-	if (dir > 0)
-		timeDirChar = CLOCKUP;
-	else
-		timeDirChar = CLOCKDN;
+void Display::ShowMode(int md) {
+	mode = md;
+	plcd->setCursor(10, 2);
+	if (mode == MODE_STOPWATCH) {
+		direction = 1;
+		plcd->print(" stopwatch");
+	}
+	else {
+		direction = -1;
+		if (mode == MODE_COUNTDOWN)
+			plcd->print(" countdown");
+		else if (mode == MODE_INTERVAL)
+			plcd->print(" interval ");
+		else
+			plcd->print(" metronome");
+	}
+	clearModeTime = millis() + 2000;
+}
+
+void Display::ClearMode() {
+	plcd->setCursor(10, 2);
+	plcd->print("          ");
 }
 
 void Display::ShowResolution(int res) {
@@ -185,24 +181,17 @@ void Display::ClearResolution() {
 }
 
 void Display::ShowMenu(boolean running, boolean longMenu) {
-	char *cdir = "down";
-	if (direction < 0) {
-		cdir = " up ";
-	}
-	
 	plcd->setCursor(0, 3);
 	if (running) {
-		if (longMenu) {
-			plcd->print("stop  lap     ");
-			plcd->print(cdir);
-		}
-		else
-			plcd->print("stop  lap ");
+    if (longMenu) {
+      plcd->print("stop  lap           ");
+    }
+    else
+      plcd->print("stop  lap ");
 	}
 	else {
 		if (longMenu) {
-			plcd->print("strt  rst     ");
-			plcd->print(cdir);
+			plcd->print("strt  rst     mode  ");
 		}
 		else
 			plcd->print("strt  rst ");
@@ -214,8 +203,6 @@ void Display::lcdInit(boolean init) {
 		plcd -> setMCPType(LTI_TYPE_MCP23008); 
 		plcd -> begin(numCols, numRows);
 		plcd -> setBacklight(HIGH);
-		plcd -> createChar(CLOCKUP, clockUpChar);
-		plcd -> createChar(CLOCKDN, clockDnChar);
 		plcd -> createChar(LAP1, lap1Char);
 		plcd -> createChar(LAP2, lap2Char);
 		plcd -> createChar(LAP3, lap3Char);

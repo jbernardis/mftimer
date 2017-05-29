@@ -12,6 +12,7 @@ class Timer {
 		void IncrementValue(int);
 		long GetValue();
 		boolean IsTriggered();
+    void ClearTrigger();
 		boolean WasStopped();
 		boolean IsRunning();
 		void sec10Timer();

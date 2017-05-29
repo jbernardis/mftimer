@@ -15,17 +15,19 @@ Timer timer(&stimer);
 
 Button startButton = Button(2, LOW);
 Button lapButton = Button(3, LOW);
-Button dirButton = Button(6, LOW);
+Button modeButton = Button(6, LOW);
 Button encButton = Button(7, LOW);
 Encoder setTime(4, 5);
 const int speakerPin = 9;
 
 void updateDisplay(void);
+void clearLaps(void);
 void getButtons(void);
 void readEncoder(void);
 void startBeeping(void);
 void beep(void);
 void stopBeeping(void);
+void pip(void);
 
 int encRes = 1;
 
@@ -39,27 +41,32 @@ const int BEEPOFF = 0;
 const int BEEP1 = 1;
 const int BEEPPAUSE1 = 2;
 const int BEEP2 = 3;
+const int PIPON = 4;
+const int PIPOFF = 5;
 
 int beepTicks;
 boolean triggered = false;
 int direction = 1;
+int mode = MODE_STOPWATCH;
 boolean running = false;
                                                                                                               
 int nLaps = 0;
 long lapTime[4];
 
 long oldPosition  = 0;
+long timerSetValue = 0;
 
 
 void setup(void) {
 	display = new Display(0x20);
 	direction = 1;
+	mode = MODE_STOPWATCH;
 	timer.SetDirection(direction);
-	display->ShowDirection(direction);
+	display->ShowMode(mode);
 	display->ShowMenu(false, true);
 	startButton.setDebounceDelay(10);
 	lapButton.setDebounceDelay(10);
-	dirButton.setDebounceDelay(10);
+	modeButton.setDebounceDelay(10);
 	encButton.setDebounceDelay(10);
 	setTime.write(0);
 	displayTimer = stimer.setInterval(100, updateDisplay);
@@ -74,25 +81,68 @@ void loop(void) {
 	stimer.run();
 	if (!triggered) {
 		if (timer.IsTriggered()) 
-			startBeeping();
+			switch(mode) {
+			case MODE_STOPWATCH:
+				break;
+			case MODE_COUNTDOWN:
+				startBeeping();
+				break;
+			case MODE_INTERVAL:
+        timer.Reset();
+				pip();
+				timer.SetValue(timerSetValue);
+        display->ShowMenu(timer.IsRunning(), nLaps <= 3);
+        break;
+			case MODE_METRONOME:
+        timer.Reset();
+				pip();
+				timer.SetValue(timerSetValue);
+				timer.Start();
+				break;
+			}
+
 	}
 }
 
 void getButtons(void) {
 	startButton.listen();
 	lapButton.listen();
-	dirButton.listen();
+	modeButton.listen();
 	encButton.listen();
 	
 	if (startButton.onPress()) {
 		if (timer.IsRunning()) {
 			timer.Stop();
-			oldPosition = timer.GetValue() * ticksPerClick;
-			setTime.write(oldPosition);
+      switch (mode) {
+      case MODE_STOPWATCH:
+      case MODE_COUNTDOWN:
+        timerSetValue = timer.GetValue();
+        oldPosition = timerSetValue * ticksPerClick;
+        setTime.write(oldPosition);
+        break;
+      case MODE_INTERVAL:
+      case MODE_METRONOME:
+        timer.SetValue(timerSetValue);
+        oldPosition = timerSetValue * ticksPerClick;
+        setTime.write(oldPosition);
+        break;     
+      }
 		}
 		else {
-			display->ShowDirection(direction);
-			timer.Start();
+			//display->ShowMode(mode);
+			switch (mode) {
+			case MODE_STOPWATCH:
+				timer.Start();
+				break;
+			case MODE_COUNTDOWN:
+			case MODE_INTERVAL:
+			case MODE_METRONOME:
+				if (timerSetValue == 0)
+					pip();
+				else
+					timer.Start();
+			}
+
 		}
 		display->ShowMenu(timer.IsRunning(), nLaps <= 3);
 	}
@@ -110,18 +160,26 @@ void getButtons(void) {
 		}
 		else {
 			timer.Reset();
-			nLaps = 0;
-			display->ShowLaps(lapTime, nLaps);
+			clearLaps();
 			oldPosition = 0;
+      timerSetValue = 0;
 			setTime.write(0);
 		}
 		display->ShowMenu(timer.IsRunning(), nLaps <= 3);
 	}
 
-	if (dirButton.onPress() && !timer.IsRunning()) {
-		direction = 0 - direction;
+	if (modeButton.onPress() && !timer.IsRunning()) {
+    clearLaps();
+		mode++;
+		if (mode > MODE_METRONOME) {
+			mode = 0;
+			direction = 1;
+		}
+		else {
+			direction = -1;
+		}
 		timer.SetDirection(direction);
-		display->ShowDirection(direction);
+		display->ShowMode(mode);
 		display->ShowMenu(timer.IsRunning(), nLaps <= 3);
 	}
 
@@ -135,6 +193,11 @@ void getButtons(void) {
 		display->ShowResolution(encRes);
 	}
     
+}
+
+void clearLaps(void) {
+  nLaps = 0;
+  display->ShowLaps(lapTime, nLaps);
 }
 
 void readEncoder(void) {
@@ -156,7 +219,8 @@ void readEncoder(void) {
 				}
 			}
 			setTime.write(newEnc);
-			timer.SetValue(newEnc/ticksPerClick);
+			timerSetValue = newEnc / ticksPerClick;
+			timer.SetValue(timerSetValue);
 			oldPosition = newEnc;
 		}
 	}
@@ -201,6 +265,16 @@ void beep() {
 			currentState = BEEPOFF;
 			nextAction = beepTicks + 6;
 			break;
+		case PIPOFF:
+			tone(speakerPin, 5000);
+			currentState = PIPON;
+			nextAction = beepTicks + 1;
+			break;
+		case PIPON:
+			noTone(speakerPin);
+			triggered = false;
+			stimer.disable(beepTimer);
+			break;
 	}
 }
 
@@ -208,5 +282,14 @@ void stopBeeping() {
 	noTone(speakerPin);
 	triggered = false;
 	stimer.disable(beepTimer);
+}
+
+void pip() {
+	stimer.enable(beepTimer);
+	tone(speakerPin, 5000);
+	currentState = PIPOFF;
+	nextAction = 0;
+	beepTicks = 0;
+	triggered = true;
 }
 
